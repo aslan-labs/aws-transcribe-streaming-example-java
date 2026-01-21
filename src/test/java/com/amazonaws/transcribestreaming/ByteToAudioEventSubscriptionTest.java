@@ -82,8 +82,8 @@ class ByteToAudioEventSubscriptionTest {
         assertTrue(level <= 1.0, "Audio level should be normalized to <= 1.0");
         
         // RMS for constant 10000 should be 10000. 
-        // Normalized: 10000 / 32768 approx 0.305
-        assertTrue(level > 0.3 && level < 0.31, "Audio level should be approximately 0.305, got " + level);
+        // Normalized: (10000 / 32768) * 175.0 approx 53.4, capped at 1.0
+        assertTrue(level > 0.9, "Audio level should be boosted and capped, got " + level);
     }
 
     @Test

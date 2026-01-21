@@ -151,9 +151,13 @@ public class ByteToAudioEventSubscription implements Subscription {
 
         if (count > 0) {
             double rms = Math.sqrt(sum / count);
-            // Normalizasyon: 0.0 ile 1.0 arası (32768 max short değeri)
-            double normalized = Math.min(1.0, rms / 32768.0);
-            audioLevelListener.accept(normalized);
+            // Normalizasyon: 0.0 ile 1.0 arası
+            // 16-bit PCM için max değer 32768, ancak normal konuşma seviyesi çok daha düşüktür.
+            // Hassasiyeti artırmak için çarpan ekliyoruz veya logaritmik yaklaşıyoruz.
+            double normalized = Math.min(1.0, (rms / 32768.0) * 175.0);
+            if (normalized > 0.001) { // Çok küçük gürültüleri filtrele
+                audioLevelListener.accept(normalized);
+            }
         }
     }
 

@@ -38,10 +38,13 @@ public class TranscribeWebController {
         return "index";
     }
 
+    private long lastVadSentTime = 0;
+
     @PostMapping("/api/transcribe/start-mic")
     @ResponseBody
-    public void startMic(@RequestParam(defaultValue = "en-US") String language) {
+    public void startMic(@RequestParam(defaultValue = "tr-TR") String language) {
         clientWrapper.setLanguageCode(LanguageCode.fromValue(language));
+        lastVadSentTime = 0;
         
         StreamTranscriptionBehavior behavior = new StreamTranscriptionBehavior() {
             @Override
@@ -77,7 +80,11 @@ public class TranscribeWebController {
         };
 
         clientWrapper.startTranscription(behavior, null, level -> {
-            sendToEmitters("VAD:" + String.format(Locale.US, "%.2f", level));
+            long now = System.currentTimeMillis();
+            if (now - lastVadSentTime > 100) { // Max 10 VAD updates per second
+                sendToEmitters("VAD:" + String.format(Locale.US, "%.2f", level));
+                lastVadSentTime = now;
+            }
         });
     }
 
@@ -90,7 +97,7 @@ public class TranscribeWebController {
     @PostMapping("/api/transcribe/file")
     @ResponseBody
     public String transcribeFile(@RequestParam("file") MultipartFile file, 
-                                 @RequestParam(defaultValue = "en-US") String language) throws IOException {
+                                 @RequestParam(defaultValue = "tr-TR") String language) throws IOException {
         File tempFile = File.createTempFile("upload", file.getOriginalFilename());
         try (FileOutputStream fos = new FileOutputStream(tempFile)) {
             fos.write(file.getBytes());
