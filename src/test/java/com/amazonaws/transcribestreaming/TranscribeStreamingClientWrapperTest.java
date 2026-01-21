@@ -3,10 +3,13 @@ package com.amazonaws.transcribestreaming;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.junit.jupiter.MockitoExtension;
+import software.amazon.awssdk.services.transcribestreaming.model.LanguageCode;
+import software.amazon.awssdk.services.transcribestreaming.model.StartStreamTranscriptionRequest;
 
 import java.io.File;
 import java.util.concurrent.CompletableFuture;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 @ExtendWith(MockitoExtension.class)
@@ -33,5 +36,13 @@ class TranscribeStreamingClientWrapperTest {
         TranscribeStreamingClientWrapper wrapper = new TranscribeStreamingClientWrapper();
         // Should not throw exception
         wrapper.stopTranscription();
+    }
+
+    @Test
+    void testBuildRequestUsesLanguageCode() {
+        TranscribeStreamingClientWrapper wrapper = new TranscribeStreamingClientWrapper();
+        StartStreamTranscriptionRequest request = wrapper.buildRequest(16000, LanguageCode.TR_TR);
+
+        assertEquals(LanguageCode.TR_TR, request.languageCode());
     }
 }

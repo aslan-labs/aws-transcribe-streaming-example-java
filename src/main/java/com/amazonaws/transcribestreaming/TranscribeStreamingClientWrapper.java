@@ -70,9 +70,18 @@ public class TranscribeStreamingClientWrapper {
 
     private TranscribeStreamingRetryClient client;
     private AudioStreamPublisher requestStream;
+    private LanguageCode languageCode = LanguageCode.EN_US;
 
     public TranscribeStreamingClientWrapper() {
         client = new TranscribeStreamingRetryClient(getClient());
+    }
+
+    public void setLanguageCode(LanguageCode languageCode) {
+        this.languageCode = (languageCode == null) ? LanguageCode.EN_US : languageCode;
+    }
+
+    public LanguageCode getLanguageCode() {
+        return languageCode;
     }
 
     public static TranscribeStreamingAsyncClient getClient() {
@@ -225,8 +234,13 @@ public class TranscribeStreamingClientWrapper {
      * @return StartStreamTranscriptionRequest to be used to open a stream to transcription service
      */
     private StartStreamTranscriptionRequest getRequest(Integer mediaSampleRateHertz) {
+        return buildRequest(mediaSampleRateHertz, languageCode);
+    }
+
+    StartStreamTranscriptionRequest buildRequest(Integer mediaSampleRateHertz, LanguageCode languageCode) {
+        LanguageCode effectiveLanguage = (languageCode == null) ? LanguageCode.EN_US : languageCode;
         return StartStreamTranscriptionRequest.builder()
-                .languageCode(LanguageCode.EN_US.toString())
+                .languageCode(effectiveLanguage.toString())
                 .mediaEncoding(MediaEncoding.PCM)
                 .mediaSampleRateHertz(mediaSampleRateHertz)
                 .build();

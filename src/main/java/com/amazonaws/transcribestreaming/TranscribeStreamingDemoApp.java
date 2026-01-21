@@ -17,39 +17,99 @@
 
 package com.amazonaws.transcribestreaming;
 
-import javafx.application.Application;
-import javafx.stage.Stage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import software.amazon.awssdk.services.transcribestreaming.model.Result;
+import software.amazon.awssdk.services.transcribestreaming.model.StartStreamTranscriptionResponse;
+import software.amazon.awssdk.services.transcribestreaming.model.TranscriptEvent;
+import software.amazon.awssdk.services.transcribestreaming.model.TranscriptResultStream;
+
+import java.awt.GraphicsEnvironment;
+import java.io.File;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Uygulamanın giriş noktasıdır (Main Class).
- * JavaFX uygulamasını başlatır ve ana pencere kontrolcüsünü (WindowController) yükler.
+ * Argüman verilirse CLI, verilmezse GUI olarak çalışır.
  */
-public class TranscribeStreamingDemoApp extends Application {
+public class TranscribeStreamingDemoApp {
 
     private static final Logger logger = LoggerFactory.getLogger(TranscribeStreamingDemoApp.class);
 
-    @Override
-    public void start(Stage primaryStage)  {
-        logger.info("TranscribeStreamingDemoApp starting...");
+    public static void main(String[] args) {
+        if (args.length == 0 && !GraphicsEnvironment.isHeadless()) {
+            logger.info("Starting GUI...");
+            TranscribeStreamingGui.main(args);
+            return;
+        }
 
-        // Ana pencere kontrolcüsünü oluştur
-        WindowController windowController = new WindowController(primaryStage);
+        logger.info("TranscribeStreamingDemoApp starting in CLI mode...");
 
-        // Pencere kapatıldığında uygulamayı ve kaynakları temizle
-        primaryStage.setOnCloseRequest(__ -> {
-            logger.info("Application closing...");
-            windowController.close();
-            System.exit(0);
-        });
-        primaryStage.show();
-        logger.info("TranscribeStreamingDemoApp started and window shown.");
+        TranscribeStreamingClientWrapper client = new TranscribeStreamingClientWrapper();
 
+        if (args.length > 0 && !args[0].equals("--mic")) {
+            // Dosya transkripsiyonu
+            File inputFile = new File(args[0]);
+            if (!inputFile.exists()) {
+                logger.error("File not found: " + args[0]);
+                return;
+            }
+            logger.info("Starting file transcription for: " + inputFile.getAbsolutePath());
+            TranscribeStreamingSynchronousClient synchronousClient = new TranscribeStreamingSynchronousClient(TranscribeStreamingClientWrapper.getClient());
+            String result = synchronousClient.transcribeFile(inputFile);
+            System.out.println("\n--- Final Transcript ---");
+            System.out.println(result);
+            System.out.println("------------------------");
+        } else {
+            // Mikrofon transkripsiyonu
+            logger.info("Starting microphone transcription... Press Ctrl+C to stop.");
+            
+            StreamTranscriptionBehavior behavior = new StreamTranscriptionBehavior() {
+                @Override
+                public void onError(Throwable e) {
+                    logger.error("Error during streaming: ", e);
+                }
+
+                @Override
+                public void onStream(TranscriptResultStream e) {
+                    List<Result> results = ((TranscriptEvent) e).transcript().results();
+                    if (results.size() > 0) {
+                        Result firstResult = results.get(0);
+                        if (firstResult.alternatives().size() > 0 &&
+                                !firstResult.alternatives().get(0).transcript().isEmpty()) {
+                            String transcript = firstResult.alternatives().get(0).transcript();
+                            if (!firstResult.isPartial()) {
+                                System.out.println("Final: " + transcript);
+                            } else {
+                                System.out.print("Partial: " + transcript + "\r");
+                            }
+                        }
+                    }
+                }
+
+                @Override
+                public void onResponse(StartStreamTranscriptionResponse r) {
+                    logger.info("Received initial response from AWS Transcribe");
+                }
+
+                @Override
+                public void onComplete() {
+                    logger.info("Streaming completed");
+                }
+            };
+
+            CompletableFuture<Void> streamingRequest = client.startTranscription(behavior, null);
+            
+            try {
+                // CLI olduğu için süresiz bekle (veya kullanıcı Ctrl+C yapana kadar)
+                streamingRequest.get();
+            } catch (Exception e) {
+                logger.error("Streaming request failed", e);
+            }
+        }
+
+        client.close();
+        logger.info("TranscribeStreamingDemoApp finished.");
     }
-
-    public static void main(String args[]) {
-        launch(args);
-    }
-
 }

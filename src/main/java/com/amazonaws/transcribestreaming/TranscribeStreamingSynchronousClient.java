@@ -64,13 +64,17 @@ public class TranscribeStreamingSynchronousClient {
      * İşlem bitene kadar (veya timeout olana kadar) bekler.
      */
     public String transcribeFile(File audioFile) {
+        return transcribeFile(audioFile, LanguageCode.EN_US);
+    }
+
+    /**
+     * Verilen ses dosyas??n?? senkron olarak transkribe eder.
+     * ????lem bitene kadar (veya timeout olana kadar) bekler.
+     */
+    public String transcribeFile(File audioFile, LanguageCode languageCode) {
         try {
             int sampleRate = (int) AudioSystem.getAudioInputStream(audioFile).getFormat().getSampleRate();
-            StartStreamTranscriptionRequest request = StartStreamTranscriptionRequest.builder()
-                    .languageCode(LanguageCode.EN_US.toString())
-                    .mediaEncoding(MediaEncoding.PCM)
-                    .mediaSampleRateHertz(sampleRate)
-                    .build();
+            StartStreamTranscriptionRequest request = buildRequest(sampleRate, languageCode);
             AudioStreamPublisher audioStream = new AudioStreamPublisher(new FileInputStream(audioFile));
             StartStreamTranscriptionResponseHandler responseHandler = getResponseHandler();
             logger.info("launching request");
@@ -93,6 +97,15 @@ public class TranscribeStreamingSynchronousClient {
             throw new RuntimeException(e);
         }
         return finalTranscript;
+    }
+
+    StartStreamTranscriptionRequest buildRequest(int sampleRate, LanguageCode languageCode) {
+        LanguageCode effectiveLanguage = (languageCode == null) ? LanguageCode.EN_US : languageCode;
+        return StartStreamTranscriptionRequest.builder()
+                .languageCode(effectiveLanguage.toString())
+                .mediaEncoding(MediaEncoding.PCM)
+                .mediaSampleRateHertz(sampleRate)
+                .build();
     }
 
     /**

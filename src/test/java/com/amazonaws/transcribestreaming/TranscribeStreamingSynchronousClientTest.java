@@ -5,12 +5,14 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import software.amazon.awssdk.services.transcribestreaming.TranscribeStreamingAsyncClient;
+import software.amazon.awssdk.services.transcribestreaming.model.LanguageCode;
 import software.amazon.awssdk.services.transcribestreaming.model.StartStreamTranscriptionRequest;
 import software.amazon.awssdk.services.transcribestreaming.model.StartStreamTranscriptionResponseHandler;
 
 import java.io.File;
 import java.util.concurrent.CompletableFuture;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
@@ -29,6 +31,15 @@ class TranscribeStreamingSynchronousClientTest {
         assertThrows(RuntimeException.class, () -> {
             client.transcribeFile(invalidFile);
         });
+    }
+
+    @Test
+    void testBuildRequestUsesLanguageCode() {
+        TranscribeStreamingSynchronousClient client = new TranscribeStreamingSynchronousClient(mockAsyncClient);
+        StartStreamTranscriptionRequest request = client.buildRequest(16000, LanguageCode.TR_TR);
+
+        assertEquals(LanguageCode.TR_TR, request.languageCode());
+        assertEquals(16000, request.mediaSampleRateHertz());
     }
 
     // Note: Testing successful transcription requires mocking AudioSystem which is a static system class.
