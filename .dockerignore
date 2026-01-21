@@ -1,0 +1,15 @@
+target/
+!.jar
+.git/
+.gitignore
+*.log
+.idea/
+.vscode/
+*.iml
+Dockerfile
+docker-compose.yml
+README.md
+agents.md
+LICENSE.txt
+CONTRIBUTING.md
+CODE_OF_CONDUCT.md
