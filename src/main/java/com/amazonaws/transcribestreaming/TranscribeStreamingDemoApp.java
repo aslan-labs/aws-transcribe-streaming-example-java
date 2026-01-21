@@ -19,19 +19,32 @@ package com.amazonaws.transcribestreaming;
 
 import javafx.application.Application;
 import javafx.stage.Stage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+/**
+ * Uygulamanın giriş noktasıdır (Main Class).
+ * JavaFX uygulamasını başlatır ve ana pencere kontrolcüsünü (WindowController) yükler.
+ */
 public class TranscribeStreamingDemoApp extends Application {
+
+    private static final Logger logger = LoggerFactory.getLogger(TranscribeStreamingDemoApp.class);
 
     @Override
     public void start(Stage primaryStage)  {
+        logger.info("TranscribeStreamingDemoApp starting...");
 
+        // Ana pencere kontrolcüsünü oluştur
         WindowController windowController = new WindowController(primaryStage);
 
+        // Pencere kapatıldığında uygulamayı ve kaynakları temizle
         primaryStage.setOnCloseRequest(__ -> {
+            logger.info("Application closing...");
             windowController.close();
             System.exit(0);
         });
         primaryStage.show();
+        logger.info("TranscribeStreamingDemoApp started and window shown.");
 
     }
 

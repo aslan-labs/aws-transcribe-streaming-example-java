@@ -17,6 +17,8 @@
 
 package com.amazonaws.transcribestreaming;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.services.transcribestreaming.TranscribeStreamingAsyncClient;
 import software.amazon.awssdk.services.transcribestreaming.model.LanguageCode;
 import software.amazon.awssdk.services.transcribestreaming.model.MediaEncoding;
@@ -37,10 +39,17 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 /**
+ * Asenkron (Async) çalışan AWS Transcribe istemcisini, senkron (bloklayan) bir şekilde kullanmak için tasarlanmış sarmalayıcı sınıftır.
+ *
+ * Kullanım Amacı:
+ * Özellikle dosya tabanlı transkripsiyonlarda, tüm dosyanın işlenmesi bitene kadar beklemek istendiğinde kullanılır.
+ * `CompletableFuture.get()` metodunu kullanarak işlem bitene kadar ana akışı bekletir.
+ *
  * An example implementation of a simple synchronous wrapper around the async client
  */
 public class TranscribeStreamingSynchronousClient {
 
+    private static final Logger logger = LoggerFactory.getLogger(TranscribeStreamingSynchronousClient.class);
     public static final int MAX_TIMEOUT_MS = 15 * 60 * 1000; //15 minutes
 
     private TranscribeStreamingAsyncClient asyncClient;
@@ -50,6 +59,10 @@ public class TranscribeStreamingSynchronousClient {
         this.asyncClient = asyncClient;
     }
 
+    /**
+     * Verilen ses dosyasını senkron olarak transkribe eder.
+     * İşlem bitene kadar (veya timeout olana kadar) bekler.
+     */
     public String transcribeFile(File audioFile) {
         try {
             int sampleRate = (int) AudioSystem.getAudioInputStream(audioFile).getFormat().getSampleRate();
@@ -60,29 +73,30 @@ public class TranscribeStreamingSynchronousClient {
                     .build();
             AudioStreamPublisher audioStream = new AudioStreamPublisher(new FileInputStream(audioFile));
             StartStreamTranscriptionResponseHandler responseHandler = getResponseHandler();
-            System.out.println("launching request");
+            logger.info("launching request");
             CompletableFuture<Void> resultFuture = asyncClient.startStreamTranscription(request, audioStream, responseHandler);
-            System.out.println("waiting for response, this will take some time depending on the length of the audio file");
+            logger.info("waiting for response, this will take some time depending on the length of the audio file");
             resultFuture.get(MAX_TIMEOUT_MS, TimeUnit.MILLISECONDS); //block until done
         } catch (IOException e) {
-            System.out.println("Error reading audio file (" + audioFile.getName() + ") : " + e);
+            logger.error("Error reading audio file ({}): ", audioFile.getName(), e);
             throw new RuntimeException(e);
         } catch (ExecutionException e) {
-            System.out.println("Error streaming audio to AWS Transcribe service: " + e);
+            logger.error("Error streaming audio to AWS Transcribe service: ", e);
             throw new RuntimeException(e);
         } catch (InterruptedException e) {
-            System.out.println("Stream thread interupted: " + e);
+            logger.error("Stream thread interupted: ", e);
             throw new RuntimeException(e);
         } catch (UnsupportedAudioFileException e) {
-            System.out.println("File type not recognized: " + audioFile.getName() + ", error: " + e);
+            logger.error("File type not recognized: {}, error: ", audioFile.getName(), e);
         } catch (TimeoutException e) {
-            System.out.println("Stream not closed within timeout window of " + MAX_TIMEOUT_MS + " ms");
+            logger.error("Stream not closed within timeout window of {} ms", MAX_TIMEOUT_MS, e);
             throw new RuntimeException(e);
         }
         return finalTranscript;
     }
 
     /**
+     * Gelen transkriptleri biriktiren bir yanıt işleyici (Response Handler) döndürür.
      * Get a response handler that aggregates the transcripts as they arrive
      * @return Response handler used to handle events from AWS Transcribe service.
      */
@@ -96,7 +110,7 @@ public class TranscribeStreamingSynchronousClient {
                                 !firstResult.alternatives().get(0).transcript().isEmpty()) {
                             String transcript = firstResult.alternatives().get(0).transcript();
                             if(!transcript.isEmpty() && !firstResult.isPartial()) {
-                                System.out.println(transcript);
+                                logger.info(transcript);
                                 finalTranscript += transcript;
                             }
                         }

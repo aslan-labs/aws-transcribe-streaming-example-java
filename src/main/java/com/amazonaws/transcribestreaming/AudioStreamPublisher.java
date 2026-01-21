@@ -19,16 +19,27 @@ package com.amazonaws.transcribestreaming;
 
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.services.transcribestreaming.model.AudioStream;
 
 import java.io.InputStream;
 
 /**
+ * AudioStreamPublisher, ses verisi akışını yayınlayan (Publisher) sınıftır.
+ * Reactive Streams standardına uygun olarak çalışır.
+ *
+ * Görevi:
+ * Bir `InputStream` (örneğin mikrofon veya dosya) üzerinden gelen ham ses verisini alır
+ * ve bunu `AudioStream` olayları olarak abonelere (Subscriber) iletir.
+ * Bu işlem, AWS Transcribe Streaming servisine veri göndermek için kullanılır.
+ *
  * AudioStreamPublisher implements audio stream publisher.
  * AudioStreamPublisher emits audio stream asynchronously in a separate thread
  */
 public class AudioStreamPublisher implements Publisher<AudioStream> {
 
+    private static final Logger logger = LoggerFactory.getLogger(AudioStreamPublisher.class);
     private final InputStream inputStream;
 
     public AudioStreamPublisher(InputStream inputStream) {
@@ -37,6 +48,9 @@ public class AudioStreamPublisher implements Publisher<AudioStream> {
 
     @Override
     public void subscribe(Subscriber<? super AudioStream> s) {
+        logger.info("AudioStreamPublisher: New subscriber subscribed.");
+        // Abonelik başladığında, ByteToAudioEventSubscription nesnesi oluşturulur.
+        // Bu nesne, InputStream'den okunan verileri AudioEvent'lere dönüştürür.
         s.onSubscribe(new ByteToAudioEventSubscription(s, inputStream));
     }
 }

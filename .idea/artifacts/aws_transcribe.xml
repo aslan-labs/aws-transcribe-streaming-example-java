@@ -1,0 +1,6 @@
+<component name="ArtifactManager">
+  <artifact type="jar" build-on-make="true" name="aws-transcribe">
+    <output-path>$PROJECT_DIR$/out/artifacts/aws_transcribe</output-path>
+    <root id="archive" name="aws-transcribe.jar" />
+  </artifact>
+</component>

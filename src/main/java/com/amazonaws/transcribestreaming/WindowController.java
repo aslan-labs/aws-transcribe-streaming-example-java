@@ -27,6 +27,8 @@ import javafx.scene.layout.GridPane;
 import javafx.scene.text.Text;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.services.transcribestreaming.model.Result;
 import software.amazon.awssdk.services.transcribestreaming.model.StartStreamTranscriptionResponse;
 import software.amazon.awssdk.services.transcribestreaming.model.TranscriptEvent;
@@ -41,11 +43,21 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
 /**
+ * Bu sınıf, uygulamanın Grafik Kullanıcı Arayüzünü (GUI) yönetir.
+ * Kullanıcı etkileşimlerini (butonlara tıklama vb.) dinler ve ilgili transkripsiyon işlemlerini tetikler.
+ *
+ * Temel Sorumlulukları:
+ * 1. JavaFX bileşenlerini (Butonlar, Metin Alanları) oluşturmak ve düzenlemek.
+ * 2. Mikrofon veya dosya transkripsiyonunu başlatmak için `TranscribeStreamingClientWrapper` ve `TranscribeStreamingSynchronousClient` kullanmak.
+ * 3. AWS Transcribe'dan gelen sonuçları ekranda göstermek.
+ *
  * This class primarily controls the GUI for this application. Most of the code relevant to starting and working
  * with our streaming API can be found in TranscribeStreamingClientWrapper.java, with the exception of some result
  * parsing logic in this classes method getResponseHandlerForWindow()
  */
 public class WindowController {
+
+    private static final Logger logger = LoggerFactory.getLogger(WindowController.class);
 
     private TranscribeStreamingClientWrapper client;
     private TranscribeStreamingSynchronousClient synchronousClient;
@@ -59,21 +71,31 @@ public class WindowController {
     private Stage primaryStage;
 
     public WindowController(Stage primaryStage) {
+        logger.info("Initializing WindowController...");
+        // İstemci sarmalayıcılarını başlat
         client = new TranscribeStreamingClientWrapper();
         synchronousClient = new TranscribeStreamingSynchronousClient(TranscribeStreamingClientWrapper.getClient());
         this.primaryStage = primaryStage;
         initializeWindow(primaryStage);
+        logger.info("WindowController initialized.");
     }
 
     public void close() {
+        logger.info("Closing WindowController resources...");
+        // Uygulama kapanırken açık olan istekleri ve istemciyi kapat
         if (inProgressStreamingRequest != null) {
             inProgressStreamingRequest.completeExceptionally(new InterruptedException());
         }
         client.close();
     }
 
+    /**
+     * Dosyadan transkripsiyon isteğini başlatır.
+     * Bu işlem senkron (bloklayan) olarak yapılır.
+     */
     private void startFileTranscriptionRequest(File inputFile) {
         if (inProgressStreamingRequest == null) {
+            logger.info("Starting file transcription request for file: {}", inputFile.getName());
             finalTextArea.clear();
             finalTranscript = "";
             startStopMicButton.setText("Streaming...");
@@ -81,16 +103,25 @@ public class WindowController {
             outputTextArea.clear();
             finalTextArea.clear();
             saveButton.setDisable(true);
+            
+            // Senkron istemciyi kullanarak dosyayı işle
             finalTranscript = synchronousClient.transcribeFile(inputFile);
+            
             finalTextArea.setText(finalTranscript);
             startStopMicButton.setDisable(false);
             saveButton.setDisable(false);
             startStopMicButton.setText("Start Microphone Transcription");
+            logger.info("File transcription request completed.");
         }
     }
 
+    /**
+     * Mikrofon üzerinden canlı transkripsiyon isteğini başlatır.
+     * Bu işlem asenkron olarak yapılır.
+     */
     private void startTranscriptionRequest(File inputFile) {
         if (inProgressStreamingRequest == null) {
+            logger.info("Starting microphone transcription request...");
             finalTextArea.clear();
             finalTranscript = "";
             startStopMicButton.setText("Connecting...");
@@ -98,10 +129,15 @@ public class WindowController {
             outputTextArea.clear();
             finalTextArea.clear();
             saveButton.setDisable(true);
+            
+            // Asenkron istemciyi kullanarak akışı başlat
             inProgressStreamingRequest = client.startTranscription(getResponseHandlerForWindow(), inputFile);
         }
     }
 
+    /**
+     * JavaFX pencere bileşenlerini oluşturur ve yerleştirir.
+     */
     private void initializeWindow(Stage primaryStage) {
         GridPane grid = new GridPane();
         grid.setAlignment(Pos.CENTER);
@@ -153,14 +189,19 @@ public class WindowController {
 
     }
 
+    /**
+     * Devam eden transkripsiyon işlemini durdurur.
+     */
     private void stopTranscription() {
         if (inProgressStreamingRequest != null) {
             try {
+                logger.info("Stopping transcription...");
                 saveButton.setDisable(true);
                 client.stopTranscription();
-                inProgressStreamingRequest.get();
+                inProgressStreamingRequest.get(); // İşlemin tamamen bitmesini bekle
+                logger.info("Transcription stopped successfully.");
             } catch (ExecutionException | InterruptedException e) {
-                System.out.println("error closing stream");
+                logger.error("Error closing stream: ", e);
             } finally {
                 inProgressStreamingRequest = null;
                 startStopMicButton.setText("Start Microphone Transcription");
@@ -172,6 +213,9 @@ public class WindowController {
     }
 
     /**
+     * AWS Transcribe servisinden gelen olayları dinleyen ve işleyen bir `StreamTranscriptionBehavior` nesnesi döndürür.
+     * Bu metod, gelen transkriptleri GUI'de göstermek ve sonuçları birleştirmekten sorumludur.
+     *
      * A StartStreamTranscriptionResponseHandler class listens to events from Transcribe streaming service that return
      * transcriptions, and decides what to do with them. This example displays the transcripts in the GUI window, and
      * combines the transcripts together into a final transcript at the end.
@@ -179,24 +223,26 @@ public class WindowController {
     private StreamTranscriptionBehavior getResponseHandlerForWindow() {
         return new StreamTranscriptionBehavior() {
 
-            //This will handle errors being returned from AWS Transcribe in your response. Here we just print the exception.
+            // AWS Transcribe'dan dönen hataları işler.
+            // This will handle errors being returned from AWS Transcribe in your response. Here we just print the exception.
             @Override
             public void onError(Throwable e) {
-                System.out.println(e.getMessage());
+                logger.error("Error received from Transcribe service: ", e);
                 Throwable cause = e.getCause();
                 while (cause != null) {
-                    System.out.println("Caused by: " + cause.getMessage());
-                    Arrays.stream(cause.getStackTrace()).forEach(l -> System.out.println("  " + l));
+                    logger.error("Caused by: ", cause);
                     if (cause.getCause() != cause) { //Look out for circular causes
                         cause = cause.getCause();
                     } else {
                         cause = null;
                     }
                 }
-                System.out.println("Error Occurred: " + e);
             }
 
             /*
+            Transcribe servisinden gelen her bir olayı (event) işler.
+            Gelen transkript parçalarını ekranda günceller ve "final" (kesinleşmiş) sonuçları ana metne ekler.
+            
             This handles each event being received from the Transcribe service. In this example we are displaying the
             transcript as it is updated, and when we receive a "final" transcript, we append it to our finalTranscript
             which is returned at the end of the microphone streaming.
@@ -209,14 +255,17 @@ public class WindowController {
                     if (firstResult.alternatives().size() > 0 && !firstResult.alternatives().get(0).transcript().isEmpty()) {
                         String transcript = firstResult.alternatives().get(0).transcript();
                         if(!transcript.isEmpty()) {
-                            System.out.println(transcript);
+                            logger.info("Transcript received: {}", transcript);
                             String displayText;
                             if (!firstResult.isPartial()) {
+                                // Sonuç kesinleştiyse (partial değilse), ana metne ekle
                                 finalTranscript += transcript + " ";
                                 displayText = finalTranscript;
                             } else {
+                                // Sonuç henüz kesinleşmediyse, geçici olarak göster
                                 displayText = finalTranscript + " " + transcript;
                             }
+                            // UI güncellemeleri JavaFX Application Thread üzerinde yapılmalı
                             Platform.runLater(() -> {
                                 outputTextArea.setText(displayText);
                                 outputTextArea.setScrollTop(Double.MAX_VALUE);
@@ -228,13 +277,16 @@ public class WindowController {
             }
 
             /*
+            AWS Transcribe servisinden ilk yanıt alındığında çağrılır.
+            Bağlantının başarılı olduğunu gösterir. UI'da butonu "Durdur" moduna geçirir.
+            
             This handles the initial response from the AWS Transcribe service, generally indicating the streams have
             successfully been opened. Here we just print that we have received the initial response and do some
             UI updates.
              */
             @Override
             public void onResponse(StartStreamTranscriptionResponse r) {
-                System.out.println(String.format("=== Received Initial response. Request Id: %s ===", r.requestId()));
+                logger.info("Received Initial response. Request Id: {}", r.requestId());
                 Platform.runLater(() -> {
                     startStopMicButton.setText("Stop Transcription");
                     startStopMicButton.setOnAction(__ -> stopTranscription());
@@ -243,13 +295,16 @@ public class WindowController {
             }
 
             /*
+            Akış hatasız bir şekilde sonlandığında çağrılır.
+            Nihai transkripti gösterir ve kaydetme butonunu aktif eder.
+
             This method is called when the stream is terminated without error. In our case we will use this opportunity
             to display the final, total transcript we've been aggregating during the transcription period and activates
             the save button.
              */
             @Override
             public void onComplete() {
-                System.out.println("=== All records streamed successfully ===");
+                logger.info("Transcription stream completed successfully.");
                 Platform.runLater(() -> {
                     finalTextArea.setText(finalTranscript);
                     saveButton.setDisable(false);
@@ -262,8 +317,9 @@ public class WindowController {
                                 FileWriter writer = new FileWriter(file);
                                 writer.write(finalTranscript);
                                 writer.close();
+                                logger.info("Transcript saved to file: {}", file.getAbsolutePath());
                             } catch (IOException e) {
-                                System.out.println("Error saving transcript to file: " + e);
+                                logger.error("Error saving transcript to file: ", e);
                             }
                         }
                     });

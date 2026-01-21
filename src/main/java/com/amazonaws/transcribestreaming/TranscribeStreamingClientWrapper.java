@@ -19,6 +19,8 @@ package com.amazonaws.transcribestreaming;
 
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.auth.signer.EventStreamAws4Signer;
@@ -49,11 +51,22 @@ import java.net.URISyntaxException;
 import java.util.concurrent.CompletableFuture;
 
 /**
+ * AWS Transcribe Streaming Async Client'ı sarmalayarak (Wrapper), GUI veya diğer bileşenler tarafından
+ * daha kolay kullanılmasını sağlayan yardımcı sınıftır.
+ *
+ * Temel İşlevleri:
+ * 1. AWS Kimlik Bilgilerini (Credentials) ve Bölge (Region) ayarlarını otomatik yapılandırır.
+ * 2. Mikrofon veya Dosya girişinden ses akışı (Audio Stream) oluşturur.
+ * 3. `TranscribeStreamingRetryClient` kullanarak transkripsiyonu başlatır.
+ * 4. Ses formatı (Sample Rate, Encoding) ayarlarını yönetir.
+ *
  * This wraps the TranscribeStreamingAsyncClient with easier to use methods for quicker integration with the GUI. This
  * also provides examples on how to handle the various exceptions that can be thrown and how to implement a request
  * stream for input to the streaming service.
  */
 public class TranscribeStreamingClientWrapper {
+
+    private static final Logger logger = LoggerFactory.getLogger(TranscribeStreamingClientWrapper.class);
 
     private TranscribeStreamingRetryClient client;
     private AudioStreamPublisher requestStream;
@@ -78,6 +91,7 @@ public class TranscribeStreamingClientWrapper {
     }
 
     /**
+     * Varsayılan bölge sağlayıcısından bölgeyi alır, bulamazsa US_WEST_2 (Oregon) kullanır.
      * Get region from default region provider chain, default to PDX (us-west-2)
      */
     private static Region getRegion() {
@@ -91,6 +105,7 @@ public class TranscribeStreamingClientWrapper {
     }
 
     /**
+     * Gerçek zamanlı konuşma tanımayı başlatır.
      * Start real-time speech recognition. Transcribe streaming java client uses Reactive-streams interface.
      * For reference on Reactive-streams: https://github.com/reactive-streams/reactive-streams-jvm
      *
@@ -99,15 +114,18 @@ public class TranscribeStreamingClientWrapper {
      * @param inputFile optional input file to stream audio from. Will stream from the microphone if this is set to null
      */
     public CompletableFuture<Void> startTranscription(StreamTranscriptionBehavior responseHandler, File inputFile) {
+        logger.info("startTranscription called.");
         if (requestStream != null) {
             throw new IllegalStateException("Stream is already open");
         }
         try {
             int sampleRate = 16_000; //default
             if (inputFile != null) {
+                logger.info("Creating stream from file: {}", inputFile.getName());
                 sampleRate = (int) AudioSystem.getAudioInputStream(inputFile).getFormat().getSampleRate();
                 requestStream = new AudioStreamPublisher(getStreamFromFile(inputFile));
             } else {
+                logger.info("Creating stream from microphone.");
                 requestStream = new AudioStreamPublisher(getStreamFromMic());
             }
             return client.startStreamTranscription(
@@ -118,6 +136,7 @@ public class TranscribeStreamingClientWrapper {
                     //Defines what to do with transcripts as they arrive from the service
                     responseHandler);
         } catch (LineUnavailableException | UnsupportedAudioFileException | IOException ex) {
+            logger.error("Error starting transcription: ", ex);
             CompletableFuture<Void> failedFuture = new CompletableFuture<>();
             failedFuture.completeExceptionally(ex);
             return failedFuture;
@@ -125,14 +144,16 @@ public class TranscribeStreamingClientWrapper {
     }
 
     /**
+     * Devam eden bir transkripsiyon varsa, akışı kapatarak durdurur.
      * Stop in-progress transcription if there is one in progress by closing the request stream
      */
     public void stopTranscription() {
+        logger.info("stopTranscription called.");
         if (requestStream != null) {
             try {
                 requestStream.inputStream.close();
             } catch (IOException ex) {
-                System.out.println("Error stopping input stream: " + ex);
+                logger.error("Error stopping input stream: ", ex);
             } finally {
                 requestStream = null;
             }
@@ -140,21 +161,24 @@ public class TranscribeStreamingClientWrapper {
     }
 
     /**
+     * İstemcileri ve akışları kapatır.
      * Close clients and streams
      */
     public void close() {
+        logger.info("close called.");
         try {
             if (requestStream != null) {
                 requestStream.inputStream.close();
             }
         } catch (IOException ex) {
-            System.out.println("error closing in-progress microphone stream: " + ex);
+            logger.error("error closing in-progress microphone stream: ", ex);
         } finally {
             client.close();
         }
     }
 
     /**
+     * Sistemdeki mikrofondan bir InputStream oluşturur.
      * Build an input stream from a microphone if one is present.
      * @return InputStream containing streaming audio from system's microphone
      * @throws LineUnavailableException When a microphone is not detected or isn't properly working
@@ -167,7 +191,7 @@ public class TranscribeStreamingClientWrapper {
         DataLine.Info info = new DataLine.Info(TargetDataLine.class, format);
 
         if (!AudioSystem.isLineSupported(info)) {
-            System.out.println("Line not supported");
+            logger.error("Microphone line not supported");
             System.exit(0);
         }
 
@@ -179,6 +203,7 @@ public class TranscribeStreamingClientWrapper {
     }
 
     /**
+     * Bir ses dosyasından InputStream oluşturur.
      * Build an input stream from an audio file
      * @param inputFile Name of the file containing audio to transcribe
      * @return InputStream built from reading the file's audio
@@ -192,6 +217,8 @@ public class TranscribeStreamingClientWrapper {
     }
 
     /**
+     * Transkripsiyon servisine gönderilecek isteği (Request) oluşturur.
+     * Dil (EN_US), Encoding (PCM) ve Sample Rate ayarlarını içerir.
      * Build StartStreamTranscriptionRequestObject containing required parameters to open a streaming transcription
      * request, such as audio sample rate and language spoken in audio
      * @param mediaSampleRateHertz sample rate of the audio to be streamed to the service in Hertz
@@ -206,6 +233,7 @@ public class TranscribeStreamingClientWrapper {
     }
 
     /**
+     * AWS kimlik bilgilerini sağlar. Varsayılan zinciri (Environment Variables, Credentials File vb.) kullanır.
      * @return AWS credentials to be used to connect to Transcribe service. This example uses the default credentials
      * provider, which looks for environment variables (AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY) or a credentials
      * file on the system running this program.

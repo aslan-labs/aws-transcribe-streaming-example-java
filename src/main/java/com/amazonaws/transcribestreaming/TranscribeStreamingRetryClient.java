@@ -24,6 +24,8 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import org.reactivestreams.Publisher;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.auth.signer.EventStreamAws4Signer;
 import software.amazon.awssdk.core.client.config.SdkAdvancedClientOption;
@@ -33,11 +35,23 @@ import software.amazon.awssdk.services.transcribestreaming.model.*;
 
 
 /**
+ * AWS Transcribe Streaming API istemcisini saran ve hata durumlarında yeniden deneme (Retry) mantığı ekleyen sınıftır.
+ *
+ * Neden Gerekli?
+ * Ağ bağlantısı kopmaları veya geçici sunucu hataları gibi durumlarda işlemin hemen başarısız olması yerine,
+ * belirli bir sayıda ve belirli aralıklarla işlemin tekrar denenmesini sağlar.
+ *
+ * Özellikleri:
+ * - Maksimum deneme sayısı (maxRetries) ve bekleme süresi (sleepTime) yapılandırılabilir.
+ * - Hangi hataların yeniden denenebilir (retriable) olduğunu kontrol eder.
+ * - Asıl işi yapan `TranscribeStreamingAsyncClient`'ı kullanır.
+ *
  * This class wraps the AWS SDK implementation of the AWS Transcribe API with some retry logic to handle common
  * error cases, such as flaky network connections.
  */
 public class TranscribeStreamingRetryClient {
 
+    private static final Logger logger = LoggerFactory.getLogger(TranscribeStreamingRetryClient.class);
     private static final int DEFAULT_MAX_RETRIES = 10;
     private static final int DEFAULT_MAX_SLEEP_TIME_MILLS = 100;
     private int maxRetries = DEFAULT_MAX_RETRIES;
@@ -106,6 +120,7 @@ public class TranscribeStreamingRetryClient {
     }
 
     /**
+     * Yeniden deneme mantığı ile transkripsiyon akışını başlatır.
      * Initiate a Stream Transcription with retry.
      * @param request StartStreamTranscriptionRequest to use to start transcription
      * @param publisher The source audio stream as Publisher
@@ -125,6 +140,7 @@ public class TranscribeStreamingRetryClient {
     }
 
     /**
+     * İstek tamamlanana veya maksimum deneme sayısına ulaşılana kadar kendini tekrar çağıran (recursive) metod.
      * Recursively call startStreamTranscription() to be called till the request is completed or till we run out of retries.
      * @param request StartStreamTranscriptionRequest
      * @param publisher The source audio stream as Publisher
@@ -143,12 +159,12 @@ public class TranscribeStreamingRetryClient {
             if (e != null) {
 
                 if (retryAttempt <= maxRetries && isExceptionRetriable(e)) {
-                    System.out.println("Retry attempt:" + (retryAttempt+1) );
+                    logger.info("Retry attempt: {}", (retryAttempt+1));
 
                     try {
                         Thread.sleep(sleepTime);
                     } catch (InterruptedException e1) {
-                        e1.printStackTrace();
+                        logger.error("Thread interrupted during retry sleep: ", e1);
                     }
                     recursiveStartStream(request, publisher, responseHandler, finalFuture, retryAttempt + 1);
                 } else {
@@ -161,6 +177,8 @@ public class TranscribeStreamingRetryClient {
             }
         });
     }
+    
+    // Her yeni istek için yeni bir Session ID oluşturur.
     private StartStreamTranscriptionRequest rebuildRequestWithSession(StartStreamTranscriptionRequest request) {
         return StartStreamTranscriptionRequest.builder()
                 .languageCode(request.languageCode())
@@ -193,12 +211,13 @@ public class TranscribeStreamingRetryClient {
     }
 
     /**
+     * Hatanın yeniden denenebilir olup olmadığını kontrol eder.
      * Check if the exception is retriable or not.
      * @param e Exception that occurred
      * @return True if the exception is retriable
      */
     private boolean isExceptionRetriable(Throwable e) {
-        e.printStackTrace();
+        // e.printStackTrace(); // Removed in favor of logging at the call site or letting the caller handle it
         if (nonRetriableExceptions.contains(e.getClass())) {
             return false;
         }

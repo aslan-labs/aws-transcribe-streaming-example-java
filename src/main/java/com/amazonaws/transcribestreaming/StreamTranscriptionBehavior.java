@@ -20,20 +20,32 @@ package com.amazonaws.transcribestreaming;
 import software.amazon.awssdk.services.transcribestreaming.model.StartStreamTranscriptionResponse;
 import software.amazon.awssdk.services.transcribestreaming.model.TranscriptResultStream;
 
+/**
+ * Transkripsiyon akışı sırasındaki olayları (Event) işlemek için kullanılan arayüzdür.
+ *
+ * Bu arayüzü uygulayan sınıflar, şu durumlarda ne yapılacağını tanımlar:
+ * - Hata oluştuğunda (onError)
+ * - Yeni bir transkripsiyon sonucu geldiğinde (onStream)
+ * - Sunucudan ilk yanıt alındığında (onResponse)
+ * - İşlem tamamlandığında (onComplete)
+ */
 public interface StreamTranscriptionBehavior {
     /**
+     * Transkripsiyon sırasında bir hata oluştuğunda çağrılır.
      * Defines how to respond when encountering an error on the stream transcription.
      * @param e The exception
      */
     void onError(Throwable e);
 
     /**
+     * Transkripsiyon sonucu (kısmi veya tam) geldiğinde çağrılır.
      * Defines how to respond to the Transcript result stream.
      * @param e The TranscriptResultStream event
      */
     void onStream(TranscriptResultStream e);
 
     /**
+     * Servis ile bağlantı kurulduğunda ve ilk yanıt alındığında çağrılır.
      * Defines what to do on initiating a stream connection with the service.
      * @param r StartStreamTranscriptionResponse
      */
@@ -41,6 +53,7 @@ public interface StreamTranscriptionBehavior {
 
 
     /**
+     * Akış başarıyla tamamlandığında çağrılır.
      * Defines what to do on stream completion
      */
     void onComplete();

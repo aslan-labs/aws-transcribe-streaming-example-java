@@ -19,6 +19,8 @@ package com.amazonaws.transcribestreaming;
 
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.core.SdkBytes;
 import software.amazon.awssdk.services.transcribestreaming.model.AudioEvent;
 import software.amazon.awssdk.services.transcribestreaming.model.AudioStream;
@@ -32,6 +34,17 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
+ * Bu sınıf, bir `InputStream`'den okunan byte verilerini AWS Transcribe servisinin beklediği
+ * `AudioEvent` nesnelerine dönüştüren bir Reactive Streams `Subscription` uygulamasıdır.
+ *
+ * Çalışma Mantığı:
+ * 1. `Publisher` (AudioStreamPublisher) ile `Subscriber` (AWS SDK Client) arasındaki bağlantıyı temsil eder.
+ * 2. `Subscriber` veri talep ettiğinde (`request` metodu), `InputStream`'den belirli bir boyutta (CHUNK_SIZE) veri okur.
+ * 3. Okunan veriyi `AudioEvent` içine paketler ve `subscriber.onNext()` ile gönderir.
+ * 4. Veri bitene kadar veya talep karşılanana kadar bu işlemi tekrarlar.
+ *
+ * Bu yapı, "Backpressure" (Geri Basınç) yönetimini sağlar; yani tüketici (AWS) hazır oldukça veri gönderilir.
+ *
  * This is an example Subscription implementation that converts bytes read from an AudioStream into AudioEvents
  * that can be sent to the Transcribe service. It implements a simple demand system that will read chunks of bytes
  * from an input stream containing audio data
@@ -40,6 +53,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * https://github.com/reactive-streams/reactive-streams-jvm/blob/v1.0.2/README.md
  */
 public class ByteToAudioEventSubscription implements Subscription {
+    private static final Logger logger = LoggerFactory.getLogger(ByteToAudioEventSubscription.class);
     private static final int CHUNK_SIZE_IN_BYTES = 1024 * 4;
     private ExecutorService executor = Executors.newFixedThreadPool(1);
     private AtomicLong demand = new AtomicLong(0);
@@ -60,6 +74,7 @@ public class ByteToAudioEventSubscription implements Subscription {
 
         demand.getAndAdd(n);
         //We need to invoke this in a separate thread because the call to subscriber.onNext(...) is recursive
+        // Veri okuma ve gönderme işlemini ayrı bir thread'de yapıyoruz çünkü onNext çağrısı recursive olabilir.
         executor.submit(() -> {
             try {
                 do {
@@ -68,11 +83,13 @@ public class ByteToAudioEventSubscription implements Subscription {
                         AudioEvent audioEvent = audioEventFromBuffer(audioBuffer);
                         subscriber.onNext(audioEvent);
                     } else {
+                        logger.info("ByteToAudioEventSubscription: Stream completed.");
                         subscriber.onComplete();
                         break;
                     }
                 } while (demand.decrementAndGet() > 0);
             } catch (Exception e) {
+                logger.error("ByteToAudioEventSubscription: Error processing stream: ", e);
                 subscriber.onError(e);
             }
         });
@@ -80,9 +97,13 @@ public class ByteToAudioEventSubscription implements Subscription {
 
     @Override
     public void cancel() {
+        logger.info("ByteToAudioEventSubscription: Cancelled.");
         executor.shutdown();
     }
 
+    /**
+     * InputStream'den bir sonraki veri parçasını (chunk) okur.
+     */
     private ByteBuffer getNextEvent() {
         ByteBuffer audioBuffer = null;
         byte[] audioBytes = new byte[CHUNK_SIZE_IN_BYTES];
@@ -102,6 +123,9 @@ public class ByteToAudioEventSubscription implements Subscription {
         return audioBuffer;
     }
 
+    /**
+     * Okunan byte verisini AWS AudioEvent nesnesine dönüştürür.
+     */
     private AudioEvent audioEventFromBuffer(ByteBuffer bb) {
         return AudioEvent.builder()
                 .audioChunk(SdkBytes.fromByteBuffer(bb))
