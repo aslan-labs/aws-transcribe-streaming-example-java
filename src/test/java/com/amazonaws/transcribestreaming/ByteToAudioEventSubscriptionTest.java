@@ -11,7 +11,13 @@ import software.amazon.awssdk.services.transcribestreaming.model.AudioStream;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.Consumer;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -48,6 +54,36 @@ class ByteToAudioEventSubscriptionTest {
     void testRequestWithZeroDemandThrowsError() {
         subscription.request(0);
         verify(mockSubscriber).onError(any(IllegalArgumentException.class));
+    }
+
+    @Test
+    void testAudioLevelCalculation() throws InterruptedException {
+        // Create 4KB of audio data with a specific pattern (sine wave or just non-zero)
+        // 4KB matches CHUNK_SIZE_IN_BYTES in ByteToAudioEventSubscription
+        int size = 4096;
+        ByteBuffer bb = ByteBuffer.allocate(size);
+        bb.order(ByteOrder.LITTLE_ENDIAN);
+        for (int i = 0; i < size / 2; i++) {
+            bb.putShort((short) 10000); // Constant amplitude
+        }
+        
+        InputStream audioStream = new ByteArrayInputStream(bb.array());
+        List<Double> levels = new ArrayList<>();
+        Consumer<Double> listener = levels::add;
+        
+        subscription = new ByteToAudioEventSubscription(mockSubscriber, audioStream, listener);
+        subscription.request(1);
+        
+        Thread.sleep(200);
+        
+        assertTrue(levels.size() > 0, "Audio level should have been reported");
+        double level = levels.get(0);
+        assertTrue(level > 0, "Audio level should be positive");
+        assertTrue(level <= 1.0, "Audio level should be normalized to <= 1.0");
+        
+        // RMS for constant 10000 should be 10000. 
+        // Normalized: 10000 / 32768 approx 0.305
+        assertTrue(level > 0.3 && level < 0.31, "Audio level should be approximately 0.305, got " + level);
     }
 
     @Test

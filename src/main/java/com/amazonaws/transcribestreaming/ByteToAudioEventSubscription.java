@@ -29,9 +29,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 
 /**
  * Bu sınıf, bir `InputStream`'den okunan byte verilerini AWS Transcribe servisinin beklediği
@@ -60,10 +62,16 @@ public class ByteToAudioEventSubscription implements Subscription {
 
     private final Subscriber<? super AudioStream> subscriber;
     private final InputStream inputStream;
+    private Consumer<Double> audioLevelListener;
 
     public ByteToAudioEventSubscription(Subscriber<? super AudioStream> s, InputStream inputStream) {
+        this(s, inputStream, null);
+    }
+
+    public ByteToAudioEventSubscription(Subscriber<? super AudioStream> s, InputStream inputStream, Consumer<Double> audioLevelListener) {
         this.subscriber = s;
         this.inputStream = inputStream;
+        this.audioLevelListener = audioLevelListener;
     }
 
     @Override
@@ -80,6 +88,7 @@ public class ByteToAudioEventSubscription implements Subscription {
                 do {
                     ByteBuffer audioBuffer = getNextEvent();
                     if (audioBuffer.remaining() > 0) {
+                        calculateAudioLevel(audioBuffer.duplicate());
                         AudioEvent audioEvent = audioEventFromBuffer(audioBuffer);
                         subscriber.onNext(audioEvent);
                     } else {
@@ -121,6 +130,31 @@ public class ByteToAudioEventSubscription implements Subscription {
         }
 
         return audioBuffer;
+    }
+
+    /**
+     * Ses seviyesini (RMS) hesaplar ve dinleyiciye bildirir.
+     */
+    private void calculateAudioLevel(ByteBuffer bb) {
+        if (audioLevelListener == null) return;
+
+        // Varsayılan: 16-bit PCM, Little Endian
+        bb.order(ByteOrder.LITTLE_ENDIAN);
+        double sum = 0;
+        int count = 0;
+
+        while (bb.remaining() >= 2) {
+            short sample = bb.getShort();
+            sum += sample * sample;
+            count++;
+        }
+
+        if (count > 0) {
+            double rms = Math.sqrt(sum / count);
+            // Normalizasyon: 0.0 ile 1.0 arası (32768 max short değeri)
+            double normalized = Math.min(1.0, rms / 32768.0);
+            audioLevelListener.accept(normalized);
+        }
     }
 
     /**

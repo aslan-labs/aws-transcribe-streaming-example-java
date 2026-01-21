@@ -50,6 +50,7 @@ import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 
 /**
  * AWS Transcribe Streaming Async Client'ı sarmalayarak (Wrapper), GUI veya diğer bileşenler tarafından
@@ -125,6 +126,10 @@ public class TranscribeStreamingClientWrapper {
      * @param inputFile optional input file to stream audio from. Will stream from the microphone if this is set to null
      */
     public CompletableFuture<Void> startTranscription(StreamTranscriptionBehavior responseHandler, File inputFile) {
+        return startTranscription(responseHandler, inputFile, null);
+    }
+
+    public CompletableFuture<Void> startTranscription(StreamTranscriptionBehavior responseHandler, File inputFile, Consumer<Double> audioLevelListener) {
         logger.info("startTranscription called.");
         if (requestStream != null) {
             throw new IllegalStateException("Stream is already open");
@@ -134,10 +139,10 @@ public class TranscribeStreamingClientWrapper {
             if (inputFile != null) {
                 logger.info("Creating stream from file: {}", inputFile.getName());
                 sampleRate = (int) AudioSystem.getAudioInputStream(inputFile).getFormat().getSampleRate();
-                requestStream = new AudioStreamPublisher(getStreamFromFile(inputFile));
+                requestStream = new AudioStreamPublisher(getStreamFromFile(inputFile), audioLevelListener);
             } else {
                 logger.info("Creating stream from microphone.");
-                requestStream = new AudioStreamPublisher(getStreamFromMic());
+                requestStream = new AudioStreamPublisher(getStreamFromMic(), audioLevelListener);
             }
             return client.startStreamTranscription(
                     //Request parameters. Refer to API documentation for details.
@@ -162,7 +167,7 @@ public class TranscribeStreamingClientWrapper {
         logger.info("stopTranscription called.");
         if (requestStream != null) {
             try {
-                requestStream.inputStream.close();
+                requestStream.getInputStream().close();
             } catch (IOException ex) {
                 logger.error("Error stopping input stream: ", ex);
             } finally {
@@ -179,7 +184,7 @@ public class TranscribeStreamingClientWrapper {
         logger.info("close called.");
         try {
             if (requestStream != null) {
-                requestStream.inputStream.close();
+                requestStream.getInputStream().close();
             }
         } catch (IOException ex) {
             logger.error("error closing in-progress microphone stream: ", ex);
@@ -256,22 +261,5 @@ public class TranscribeStreamingClientWrapper {
      */
     private static AwsCredentialsProvider getCredentials() {
         return DefaultCredentialsProvider.create();
-    }
-
-    /**
-     * AudioStreamPublisher implements audio stream publisher.
-     * AudioStreamPublisher emits audio stream asynchronously in a separate thread
-     */
-    private static class AudioStreamPublisher implements Publisher<AudioStream> {
-        private final InputStream inputStream;
-
-        private AudioStreamPublisher(InputStream inputStream) {
-            this.inputStream = inputStream;
-        }
-
-        @Override
-        public void subscribe(Subscriber<? super AudioStream> s) {
-            s.onSubscribe(new ByteToAudioEventSubscription(s, inputStream));
-        }
     }
 }

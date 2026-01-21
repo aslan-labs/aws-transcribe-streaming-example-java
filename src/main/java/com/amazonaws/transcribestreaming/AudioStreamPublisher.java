@@ -24,6 +24,7 @@ import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.services.transcribestreaming.model.AudioStream;
 
 import java.io.InputStream;
+import java.util.function.Consumer;
 
 /**
  * AudioStreamPublisher, ses verisi akışını yayınlayan (Publisher) sınıftır.
@@ -41,9 +42,19 @@ public class AudioStreamPublisher implements Publisher<AudioStream> {
 
     private static final Logger logger = LoggerFactory.getLogger(AudioStreamPublisher.class);
     private final InputStream inputStream;
+    private Consumer<Double> audioLevelListener;
 
     public AudioStreamPublisher(InputStream inputStream) {
+        this(inputStream, null);
+    }
+
+    public AudioStreamPublisher(InputStream inputStream, Consumer<Double> audioLevelListener) {
         this.inputStream = inputStream;
+        this.audioLevelListener = audioLevelListener;
+    }
+
+    public InputStream getInputStream() {
+        return inputStream;
     }
 
     @Override
@@ -51,6 +62,6 @@ public class AudioStreamPublisher implements Publisher<AudioStream> {
         logger.info("AudioStreamPublisher: New subscriber subscribed.");
         // Abonelik başladığında, ByteToAudioEventSubscription nesnesi oluşturulur.
         // Bu nesne, InputStream'den okunan verileri AudioEvent'lere dönüştürür.
-        s.onSubscribe(new ByteToAudioEventSubscription(s, inputStream));
+        s.onSubscribe(new ByteToAudioEventSubscription(s, inputStream, audioLevelListener));
     }
 }

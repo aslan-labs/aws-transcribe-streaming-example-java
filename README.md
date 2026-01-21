@@ -34,11 +34,6 @@ To generate an executable jar, use the following commands:
 mvn clean package
 ```
 
-To run the application (GUI mode):
-```bash
-java -jar target/aws-transcribe-sample-application-1.0-SNAPSHOT.jar
-```
-
 To run the application for microphone transcription (CLI mode):
 ```bash
 java -jar target/aws-transcribe-sample-application-1.0-SNAPSHOT.jar --mic
@@ -49,9 +44,14 @@ To run the application for file transcription (CLI mode):
 java -jar target/aws-transcribe-sample-application-1.0-SNAPSHOT.jar <path-to-audio-file>
 ```
 
+To run the application for web interface:
+```bash
+java -jar target/aws-transcribe-sample-application-1.0-SNAPSHOT.jar
+```
+
 ## Description
 
-This application demonstrates how to use AWS Transcribe's streaming API via both a graphical user interface (Swing) and a command-line interface.
+This application demonstrates how to use AWS Transcribe's streaming API via a command-line interface and a web interface.
 The code with the call to the Transcribe API is located in TranscribeStreamingClientWrapper.java, in the 
 "startTranscription" method.
 
@@ -65,8 +65,7 @@ service in the TranscribeStreamingSynchronousClient.java class, which is used fo
 
 |Class|Description|
 |---|---|
-| `TranscribeStreamingDemoApp` | Main method that launches the application (GUI or CLI) |
-| `TranscribeStreamingGui` | Simple Swing-based Graphical User Interface |
+| `TranscribeStreamingDemoApp` | Main method that launches the application (CLI or Web) |
 | `TranscribeStreamingClientWrapper` | Wrapper around the AWS SDK Transcribe Client, provides examples of how to call the SDK's methods properly |
 | `AudioStreamPublisher` | Used to provide streaming events to the service, wraps `ByteToAudioEventSubscription` |
 | `ByteToAudioEventSubscription` | Converts bytes from audio input into AudioEvents to send to the AWS Transcribe Service |

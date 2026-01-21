@@ -43,6 +43,15 @@ class TranscribeStreamingClientWrapperTest {
         TranscribeStreamingClientWrapper wrapper = new TranscribeStreamingClientWrapper();
         StartStreamTranscriptionRequest request = wrapper.buildRequest(16000, LanguageCode.TR_TR);
 
-        assertEquals(LanguageCode.TR_TR, request.languageCode());
+        assertEquals(LanguageCode.TR_TR.toString(), request.languageCodeAsString());
+    }
+
+    @Test
+    void testStartTranscriptionWithAudioLevelListenerAndInvalidFile() {
+        TranscribeStreamingClientWrapper wrapper = new TranscribeStreamingClientWrapper();
+        File invalidFile = new File("invalid.wav");
+        
+        CompletableFuture<Void> future = wrapper.startTranscription(null, invalidFile, level -> {});
+        assertThrows(Exception.class, future::join);
     }
 }

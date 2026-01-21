@@ -23,15 +23,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ApplicationContext;
-import org.springframework.context.ConfigurableApplicationContext;
 import software.amazon.awssdk.services.transcribestreaming.model.Result;
 import software.amazon.awssdk.services.transcribestreaming.model.StartStreamTranscriptionResponse;
 import software.amazon.awssdk.services.transcribestreaming.model.TranscriptEvent;
 import software.amazon.awssdk.services.transcribestreaming.model.TranscriptResultStream;
 
-import java.awt.GraphicsEnvironment;
 import java.io.File;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -39,7 +36,6 @@ import java.util.concurrent.CompletableFuture;
 /**
  * Uygulamanın giriş noktasıdır (Main Class).
  * Spring Boot ile yapılandırılmıştır.
- * Argüman verilirse CLI, verilmezse GUI olarak çalışır.
  */
 @SpringBootApplication
 public class TranscribeStreamingDemoApp implements CommandLineRunner {
@@ -50,21 +46,15 @@ public class TranscribeStreamingDemoApp implements CommandLineRunner {
     private ApplicationContext applicationContext;
 
     public static void main(String[] args) {
-        if (args.length == 0 && !GraphicsEnvironment.isHeadless()) {
-            logger.info("Starting GUI...");
-            SpringApplicationBuilder builder = new SpringApplicationBuilder(TranscribeStreamingDemoApp.class);
-            builder.headless(false);
-            ConfigurableApplicationContext context = builder.run(args);
-            TranscribeStreamingGui gui = context.getBean(TranscribeStreamingGui.class);
-            gui.setVisible(true);
-        } else {
-            SpringApplication.run(TranscribeStreamingDemoApp.class, args);
-        }
+        SpringApplication app = new SpringApplication(TranscribeStreamingDemoApp.class);
+        app.run(args);
     }
 
     @Override
     public void run(String... args) throws Exception {
         if (args.length == 0) {
+            logger.info("Usage: java -jar app.jar <file_path> OR java -jar app.jar --mic");
+            logger.info("Application is also running as a web server on http://localhost:8080");
             return;
         }
 
@@ -123,7 +113,10 @@ public class TranscribeStreamingDemoApp implements CommandLineRunner {
                 }
             };
 
-            CompletableFuture<Void> streamingRequest = client.startTranscription(behavior, null);
+            CompletableFuture<Void> streamingRequest = client.startTranscription(behavior, null, level -> {
+                // VAD görselleştirmesi CLI'da basitçe yüzde olarak gösterilebilir (isteğe bağlı)
+                // System.out.print(String.format("VAD: %.2f%%\r", level * 100));
+            });
             
             try {
                 // CLI olduğu için süresiz bekle (veya kullanıcı Ctrl+C yapana kadar)
