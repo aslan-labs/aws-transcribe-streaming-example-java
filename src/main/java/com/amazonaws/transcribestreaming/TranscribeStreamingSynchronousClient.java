@@ -19,6 +19,7 @@ package com.amazonaws.transcribestreaming;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
 import software.amazon.awssdk.services.transcribestreaming.TranscribeStreamingAsyncClient;
 import software.amazon.awssdk.services.transcribestreaming.model.LanguageCode;
 import software.amazon.awssdk.services.transcribestreaming.model.MediaEncoding;
@@ -47,6 +48,7 @@ import java.util.concurrent.TimeoutException;
  *
  * An example implementation of a simple synchronous wrapper around the async client
  */
+@Component
 public class TranscribeStreamingSynchronousClient {
 
     private static final Logger logger = LoggerFactory.getLogger(TranscribeStreamingSynchronousClient.class);
@@ -54,6 +56,10 @@ public class TranscribeStreamingSynchronousClient {
 
     private TranscribeStreamingAsyncClient asyncClient;
     private String finalTranscript = "";
+
+    public TranscribeStreamingSynchronousClient() {
+        this.asyncClient = TranscribeStreamingClientWrapper.getClient();
+    }
 
     public TranscribeStreamingSynchronousClient(TranscribeStreamingAsyncClient asyncClient) {
         this.asyncClient = asyncClient;

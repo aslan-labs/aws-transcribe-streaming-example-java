@@ -1,5 +1,7 @@
 package com.amazonaws.transcribestreaming;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 import software.amazon.awssdk.services.transcribestreaming.model.Result;
 import software.amazon.awssdk.services.transcribestreaming.model.StartStreamTranscriptionResponse;
 import software.amazon.awssdk.services.transcribestreaming.model.TranscriptEvent;
@@ -15,6 +17,7 @@ import java.util.concurrent.CompletableFuture;
 /**
  * AWS Transcribe için basit bir Swing tabanlı arayüz.
  */
+@Component
 public class TranscribeStreamingGui extends JFrame {
 
     private JTextArea textArea;
@@ -22,10 +25,20 @@ public class TranscribeStreamingGui extends JFrame {
     private JButton fileButton;
     private JButton stopButton;
     private JComboBox<LanguageOption> languageCombo;
+    
+    @Autowired
     private TranscribeStreamingClientWrapper clientWrapper;
+    
+    @Autowired
+    private TranscribeStreamingSynchronousClient synchronousClient;
+
     private CompletableFuture<Void> streamingRequest;
 
     public TranscribeStreamingGui() {
+        initGui();
+    }
+
+    private void initGui() {
         setTitle("AWS Transcribe Streaming Demo");
         setSize(600, 400);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -56,8 +69,6 @@ public class TranscribeStreamingGui extends JFrame {
         buttonPanel.add(fileButton);
         buttonPanel.add(stopButton);
         add(buttonPanel, BorderLayout.SOUTH);
-
-        clientWrapper = new TranscribeStreamingClientWrapper();
 
         micButton.addActionListener(e -> startMicTranscription());
         fileButton.addActionListener(e -> startFileTranscription());
@@ -125,9 +136,8 @@ public class TranscribeStreamingGui extends JFrame {
 
             new Thread(() -> {
                 try {
-                    TranscribeStreamingSynchronousClient syncClient = new TranscribeStreamingSynchronousClient(TranscribeStreamingClientWrapper.getClient());
                     LanguageCode selectedLanguage = getSelectedLanguageCode();
-                    String transcript = syncClient.transcribeFile(selectedFile, selectedLanguage);
+                    String transcript = synchronousClient.transcribeFile(selectedFile, selectedLanguage);
                     SwingUtilities.invokeLater(() -> {
                         textArea.append("\n--- Transkript ---\n");
                         textArea.append(transcript);

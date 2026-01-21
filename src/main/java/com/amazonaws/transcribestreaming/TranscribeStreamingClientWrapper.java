@@ -21,6 +21,7 @@ import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.auth.signer.EventStreamAws4Signer;
@@ -64,6 +65,7 @@ import java.util.concurrent.CompletableFuture;
  * also provides examples on how to handle the various exceptions that can be thrown and how to implement a request
  * stream for input to the streaming service.
  */
+@Component
 public class TranscribeStreamingClientWrapper {
 
     private static final Logger logger = LoggerFactory.getLogger(TranscribeStreamingClientWrapper.class);

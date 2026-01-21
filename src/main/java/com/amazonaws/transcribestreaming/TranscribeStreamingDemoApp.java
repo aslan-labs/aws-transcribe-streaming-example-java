@@ -19,6 +19,13 @@ package com.amazonaws.transcribestreaming;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.builder.SpringApplicationBuilder;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.ConfigurableApplicationContext;
 import software.amazon.awssdk.services.transcribestreaming.model.Result;
 import software.amazon.awssdk.services.transcribestreaming.model.StartStreamTranscriptionResponse;
 import software.amazon.awssdk.services.transcribestreaming.model.TranscriptEvent;
@@ -31,22 +38,39 @@ import java.util.concurrent.CompletableFuture;
 
 /**
  * Uygulamanın giriş noktasıdır (Main Class).
+ * Spring Boot ile yapılandırılmıştır.
  * Argüman verilirse CLI, verilmezse GUI olarak çalışır.
  */
-public class TranscribeStreamingDemoApp {
+@SpringBootApplication
+public class TranscribeStreamingDemoApp implements CommandLineRunner {
 
     private static final Logger logger = LoggerFactory.getLogger(TranscribeStreamingDemoApp.class);
+
+    @Autowired
+    private ApplicationContext applicationContext;
 
     public static void main(String[] args) {
         if (args.length == 0 && !GraphicsEnvironment.isHeadless()) {
             logger.info("Starting GUI...");
-            TranscribeStreamingGui.main(args);
+            SpringApplicationBuilder builder = new SpringApplicationBuilder(TranscribeStreamingDemoApp.class);
+            builder.headless(false);
+            ConfigurableApplicationContext context = builder.run(args);
+            TranscribeStreamingGui gui = context.getBean(TranscribeStreamingGui.class);
+            gui.setVisible(true);
+        } else {
+            SpringApplication.run(TranscribeStreamingDemoApp.class, args);
+        }
+    }
+
+    @Override
+    public void run(String... args) throws Exception {
+        if (args.length == 0) {
             return;
         }
 
         logger.info("TranscribeStreamingDemoApp starting in CLI mode...");
 
-        TranscribeStreamingClientWrapper client = new TranscribeStreamingClientWrapper();
+        TranscribeStreamingClientWrapper client = applicationContext.getBean(TranscribeStreamingClientWrapper.class);
 
         if (args.length > 0 && !args[0].equals("--mic")) {
             // Dosya transkripsiyonu
@@ -56,7 +80,7 @@ public class TranscribeStreamingDemoApp {
                 return;
             }
             logger.info("Starting file transcription for: " + inputFile.getAbsolutePath());
-            TranscribeStreamingSynchronousClient synchronousClient = new TranscribeStreamingSynchronousClient(TranscribeStreamingClientWrapper.getClient());
+            TranscribeStreamingSynchronousClient synchronousClient = applicationContext.getBean(TranscribeStreamingSynchronousClient.class);
             String result = synchronousClient.transcribeFile(inputFile);
             System.out.println("\n--- Final Transcript ---");
             System.out.println(result);
